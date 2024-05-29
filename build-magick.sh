@@ -146,7 +146,7 @@ cleanup() {
     #       cleanup
     #       ;;
     #esac
-    cleanup
+    rm -fr "$cwd"
 }
 
 set_high_end_cpu() {
