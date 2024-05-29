@@ -152,7 +152,7 @@ cleanup() {
 set_high_end_cpu() {
     local random_dir
     random_dir=$(mktemp -d)
-    wget -cqO "$random_dir/high-end-cpu-policy.sh" "https://raw.githubusercontent.com/slyfox1186/imagemagick-build-script/main/high-end-cpu-policy.sh"
+    wget -cqO "$random_dir/high-end-cpu-policy.sh" "https://raw.githubusercontent.com/rawhide-kobayashi/imagemagick-build-script/main/high-end-cpu-policy.sh"
     bash "$random_dir/high-end-cpu-policy.sh"
     rm -fr "$random_dir"
 }
