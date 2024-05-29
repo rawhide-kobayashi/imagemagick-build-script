@@ -456,7 +456,7 @@ apt_pkgs() {
         printf "       %s\n" "${available_packages[@]}"
         echo
         apt update
-        apt install "${available_packages[@]}"
+        apt install -y "${available_packages[@]}"
         apt -y autoremove
         echo
     else
