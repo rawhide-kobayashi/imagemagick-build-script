@@ -126,26 +126,27 @@ warn() {
 }
 
 cleanup() {
-    local choice
+    #local choice
 
-    echo
-    echo "========================================================"
-    echo "        Do you want to clean up the build files?        "
-    echo "========================================================"
-    echo
-    echo "[1] Yes"
-    echo "[2] No"
-    echo
+    #echo
+    #echo "========================================================"
+    #echo "        Do you want to clean up the build files?        "
+    #echo "========================================================"
+    #echo
+    #echo "[1] Yes"
+    #echo "[2] No"
+    #echo
 
-    read -p "Your choices are (1 or 2): " choice
+    #read -p "Your choices are (1 or 2): " choice
 
-    case "$choice" in
-        1) rm -fr "$cwd" ;;
-        2) return ;;
-        *) unset choice
-           cleanup
-           ;;
-    esac
+    #case "$choice" in
+    #    1) rm -fr "$cwd" ;;
+    #    2) return ;;
+    #    *) unset choice
+    #       cleanup
+    #       ;;
+    #esac
+    cleanup
 }
 
 set_high_end_cpu() {
