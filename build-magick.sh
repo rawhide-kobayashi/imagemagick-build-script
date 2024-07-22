@@ -18,7 +18,7 @@ cwd="$PWD/magick-build-script"
 packages="$cwd/packages"
 workspace="$cwd/workspace"
 regex_string='(Rc|rc|rC|RC|alpha|beta|master|pre)+[0-9]*$'
-debug=OFF
+debug=ON
 
 # Pre-defined color variables
 RED='\033[0;31m'
@@ -102,32 +102,33 @@ warn() {
 }
 
 cleanup() {
-    local choice
+    #local choice
 
-    echo
-    echo "========================================================"
-    echo "       Would you like to clean up the build files?      "
-    echo "========================================================"
-    echo
-    echo "[1] Yes"
-    echo "[2] No"
-    echo
+    #echo
+    #echo "========================================================"
+    #echo "        Do you want to clean up the build files?        "
+    #echo "========================================================"
+    #echo
+    #echo "[1] Yes"
+    #echo "[2] No"
+    #echo
 
-    read -p "Your choices are (1 or 2): " choice
+    #read -p "Your choices are (1 or 2): " choice
 
-    case "$choice" in
-        1) rm -fr "$cwd" ;;
-        2) ;;
-        *) unset choice
-           cleanup
-           ;;
-    esac
+    #case "$choice" in
+    #    1) rm -fr "$cwd" ;;
+    #    2) return ;;
+    #    *) unset choice
+    #       cleanup
+    #       ;;
+    #esac
+    rm -fr "$cwd"
 }
 
 set_high_end_cpu() {
     local random_dir
     random_dir=$(mktemp -d)
-    wget -cqO "$random_dir/high-end-cpu-policy.sh" "https://raw.githubusercontent.com/slyfox1186/imagemagick-build-script/main/high-end-cpu-policy.sh"
+    wget -cqO "$random_dir/high-end-cpu-policy.sh" "https://raw.githubusercontent.com/rawhide-kobayashi/imagemagick-build-script/main/high-end-cpu-policy.sh"
     bash "$random_dir/high-end-cpu-policy.sh"
     rm -fr "$random_dir"
 }
@@ -454,7 +455,7 @@ apt_pkgs() {
         printf "       %s\n" "${available_packages[@]}"
         echo
         apt update
-        apt install "${available_packages[@]}"
+        apt install -y "${available_packages[@]}"
         apt -y autoremove
         echo
     else

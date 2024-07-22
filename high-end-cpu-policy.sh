@@ -92,4 +92,4 @@ EOF
 )
 
 # Save the updated XML content to the specified file
-echo "$updated_xml" | sudo tee "/usr/local/etc/ImageMagick-7/policy.xml" >/dev/null
+echo "$updated_xml" | tee "/usr/local/etc/ImageMagick-7/policy.xml" >/dev/null
