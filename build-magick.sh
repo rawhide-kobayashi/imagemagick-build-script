@@ -1,21 +1,19 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2034
 
-# Script Version: 1.6.0
-# Updated: 05.24.24
+# Script Version: 1.1.1
+# Updated: 07.03.24
 # GitHub: https://github.com/slyfox1186/imagemagick-build-script
 # Purpose: Build ImageMagick 7 from the source code obtained from ImageMagick's official GitHub repository
-# Function: ImageMagick is the leading open-source command line image processor. It can blur, sharpen, warp, reduce total file size, ect... The possibilities are vast
-# Method: The script will search GitHub for the latest released version and upon execution will import the information into the script
-# Supported OS: Debian 11/12 | Ubuntu 20.04/22.04/23.04/23.10/24.04
+# Supported OS: Debian (11|12) | Ubuntu (20|22|24).04
 
 if [[ "$EUID" -ne 0 ]]; then
-    echo "This script must be run with root/sudo"
+    echo "This script must be run as root or with sudo."
     exit 1
 fi
 
 # SET GLOBAL VARIABLES
-script_ver="1.6.0"
+script_ver="1.1.1"
 cwd="$PWD/magick-build-script"
 packages="$cwd/packages"
 workspace="$cwd/workspace"
@@ -50,7 +48,7 @@ mkdir -p "$packages" "$workspace"
 # SET THE COMPILERS TO USE AND THE COMPILER OPTIMIZATION FLAGS
 CC="gcc"
 CXX="g++"
-CFLAGS="-O3 -fPIC -pipe -march=native -fstack-protector-strong"
+CFLAGS="-O2 -fPIC -pipe -march=native -fstack-protector-strong"
 CXXFLAGS="$CFLAGS"
 CPPFLAGS="-I$workspace/include -I/usr/local/include -I/usr/include -D_FORTIFY_SOURCE=2"
 LDFLAGS="-Wl,-O1 -Wl,--as-needed -Wl,-rpath,/usr/local/lib64:/usr/local/lib"
@@ -58,30 +56,13 @@ export CC CXX CFLAGS CXXFLAGS CPPFLAGS LDFLAGS
 
 # SET THE AVAILABLE CPU COUNT FOR PARALLEL PROCESSING (SPEEDS UP THE BUILD PROCESS)
 if [[ -f /proc/cpuinfo ]]; then
-    cpu_threads=$(grep --count ^processor /proc/cpuinfo)
+    cpu_threads=$(grep -c ^processor /proc/cpuinfo)
 else
     cpu_threads=$(nproc --all)
 fi
 
-# SET THE PATH
-if [[ -d /usr/lib/ccache/bin ]]; then
-    ccache_dir=/usr/lib/ccache/bin
-else
-    ccache_dir=/usr/lib/ccache
-fi
-
 # Set the path variable
-PATH="\
-$ccache_dir:\
-$workspace/bin:\
-$HOME/.local/bin:\
-/usr/local/sbin:\
-/usr/local/bin:\
-/usr/sbin:\
-/usr/bin:\
-/sbin:\
-/bin\
-"
+PATH="/usr/lib/ccache:$workspace/bin:$PATH"
 export PATH
 
 # Set the pkg_config_path variable
@@ -92,12 +73,7 @@ $workspace/lib/pkgconfig:\
 $workspace/share/pkgconfig:\
 /usr/local/lib64/pkgconfig:\
 /usr/local/lib/x86_64-linux-gnu/pkgconfig:\
-/usr/local/lib/pkgconfig:\
-/usr/local/share/pkgconfig:\
-/usr/lib64/pkgconfig:\
-/usr/lib/pkgconfig:\
-/usr/lib/x86_64-linux-gnu/pkgconfig:\
-/usr/share/pkgconfig\
+/usr/local/lib/pkgconfig\
 "
 export PKG_CONFIG_PATH
 
@@ -111,8 +87,8 @@ exit_fn() {
 
 fail() {
     echo
-    echo -e "${RED}[ERROR]${NC} $1\\n"
-    echo -e "${GREEN}[INFO]${NC} For help or to report a bug create an issue at: https://github.com/slyfox1186/script-repo/issues"
+    echo -e "${RED}[ERROR]${NC} $1\n"
+    echo -e "${GREEN}[INFO]${NC} For help or to report a bug, create an issue at: https://github.com/slyfox1186/script-repo/issues"
     echo
     exit 1
 }
@@ -168,7 +144,7 @@ execute() {
     else
         if ! output=$("$@" 2>&1); then
             notify-send -t 5000 "Failed to execute: $*" 2>/dev/null
-            fail "Failed to execute: $*"
+            fail "Failed to execute: $*. Line: $LINENO"
         fi
     fi
 }
@@ -257,7 +233,7 @@ git_clone() {
               head -n1
          )
 
-    # If no tags found, use the latest commit hash as the version
+    # If no tags are found, use the latest commit hash as the version
     if [[ -z "$version" ]]; then
         version=$(git ls-remote "$repo_url" |
                   grep "HEAD" |
@@ -295,7 +271,7 @@ show_version() {
     magick -version 2>/dev/null || fail "Failure to execute the command: magick -version. Line: $LINENO"
 }
 
-# Parse each git repoitory to find the latest release version number for each program
+# Parse each git repository to find the latest release version number for each program
 gnu_repo() {
     local url="$1"
     version=$(curl -fsS "$url" | grep -oP '[a-z]+-\K(([0-9\.]*[0-9]+)){2,}' | sort -rV | head -n1)
@@ -322,8 +298,8 @@ github_repo() {
             ((count++))
         fi
     done
-    # Handle case where no non-RC version is found after max attempts
-    [[ -z "$version" ]] && fail "No matching version found without RC/rc suffix."
+    # Handle cases where only release candidate versions are found after the script reaches the maximum attempts
+    [[ -z "$version" ]] && fail "No matching version found without RC/rc suffix. Line: $LINENO"
 }
 
 gitlab_freedesktop_repo() {
@@ -337,27 +313,26 @@ gitlab_freedesktop_repo() {
             version=$(echo "$curl_results" | jq -r ".[$count].name")
             version="${version#v}"
 
-            # Check if version contains "RC" and skip it
+            # Check if the version contains "RC" and skip it
             if [[ $version =~ $regex_string ]]; then
                 ((count++))
             else
                 break # Exit the loop when a non-RC version is found
             fi
         else
-            fail "Failed to fetch data from GitLab API."
+            fail "Failed to fetch data from GitLab API. Line: $LINENO"
         fi
     done
 }
 
 gitlab_gnome_repo() {
     local count repo url
-
     repo="$1"
     url="$2"
     count=0
     version=""
 
-    [[ -z "$repo" ]] && fail "Repository name is required."
+    [[ -z "$repo" ]] && fail "Repository name is required. Line: $LINENO"
 
     if curl_results=$(curl -fsSL "https://gitlab.gnome.org/api/v4/projects/$repo/repository/$url"); then
         version=$(echo "$curl_results" | jq -r '.[0].name')
@@ -382,7 +357,7 @@ find_git_repo() {
         1) set_repo="github_repo" ;;
         2) set_repo="gitlab_freedesktop_repo" ;;
         3) set_repo="gitlab_gnome_repo" ;;
-        *) fail "Error: Could not detect the variable \"\$git_repo_type\" in the function \"find_git_repo\". (Line: $LINENO)"
+        *) fail "Error: Could not detect the variable \"\$git_repo_type\" in the function \"find_git_repo\". Line: $LINENO"
     esac
 
     case "$url_action" in
@@ -393,11 +368,30 @@ find_git_repo() {
     "$set_repo" "$url" "$set_action" 2>/dev/null
 }
 
-find_git_repo "7950" "2" "T"
+download_fonts() {
+    font_urls=(
+        "https://github.com/dejavu-fonts/dejavu-fonts.git"
+        "https://github.com/adobe-fonts/source-code-pro.git"
+        "https://github.com/adobe-fonts/source-sans-pro.git"
+        "https://github.com/adobe-fonts/source-serif-pro.git"
+        "https://github.com/googlefonts/roboto.git"
+        "https://github.com/mozilla/Fira.git"
+    )
+    for font_url in "${font_urls[@]}"; do
+        repo_name="${font_url##*/}"
+        repo_name="${repo_name%.git}"
+        git_caller "$font_url" "$repo_name"
+        if build "$repo_name" "$version"; then
+            git_clone "$git_url" "$repo_name"
+            execute cp -fr . "/usr/share/fonts/truetype/"
+            build_done "$repo_name" "$version"
+        fi
+    done
+}
 
 find_ghostscript_version() {
     version="$1"
-    # Extract numeric part of version (removing 'gs' prefix if it exists)
+    # Extract the numeric part of the version (removing the prefix text 'gs' if it exists)
     gs_modified="$(echo "$version" | sed -E 's/([0-9]+)\.([0-9]+)\.([0-9]+)/gs\1\2\3/')"
 
     # Construct the archive URL using the original version string without dots
@@ -405,7 +399,8 @@ find_ghostscript_version() {
 }
 
 apt_pkgs() {
-    local pkg pkgs missing_packages
+    local pkg missing_packages
+    local -a pkgs=()
 
     pkgs=(
         $1 alien autoconf autoconf-archive binutils bison build-essential
@@ -419,6 +414,9 @@ apt_pkgs() {
         libyuv0 lsb-release lzip m4 meson nasm ninja-build php-dev pkg-config
         python3-dev yasm zlib1g-dev
     )
+
+    [[ "$OS" == "Debian" ]] && pkgs+=(libjpeg62-turbo libjpeg62-turbo-dev)
+    [[ "$OS" == "Ubuntu" ]] && pkgs+=(libjpeg62 libjpeg62-dev)
 
     # Initialize arrays for missing, available, and unavailable packages
     missing_packages=()
@@ -434,7 +432,7 @@ apt_pkgs() {
         fi
     done
 
-    # Check availability of missing packages and categorize them
+    # Check the availability of missing packages and categorize them
     for pkg in "${missing_packages[@]}"; do
         if apt-cache show "$pkg" >/dev/null 2>&1; then
             available_packages+=("$pkg")
@@ -462,7 +460,6 @@ apt_pkgs() {
         echo
     else
         log "No missing packages to install or all missing packages are unavailable."
-        echo
     fi
 }
 
@@ -470,7 +467,7 @@ download_autotrace() {
     if build "autotrace" "0.40.0-20200219"; then
         curl -fsSLo "$packages/deb-files/autotrace-0.40.0-20200219.deb" "https://github.com/autotrace/autotrace/releases/download/travis-20200219.65/autotrace_0.40.0-20200219_all.deb"
         cd "$packages/deb-files" || exit 1
-        execute apt-get -y install ./autotrace-0.40.0-20200219.deb
+        execute apt -y install ./autotrace-0.40.0-20200219.deb
         build_done "autotrace" "0.40.0-20200219"
     fi
 }
@@ -478,9 +475,10 @@ download_autotrace() {
 set_autotrace() {
     # Enable or disable autotrace
     case "$OS" in
-        Ubuntu) download_autotrace
-                local flag="true"
-                ;;
+        Ubuntu)
+            download_autotrace
+            local flag="true"
+            ;;
     esac
 
     if [[ "$flag" == "true" ]]; then
@@ -508,7 +506,7 @@ get_os_version() {
         OS=$(lsb_release -si)
         VER=$(lsb_release -sr)
     elif [[ -f /etc/os-release ]]; then
-        . /etc/os-release
+        source /etc/os-release
         OS=$NAME
         VER=$VERSION_ID
     else
@@ -521,10 +519,17 @@ get_os_version
 
 # DISCOVER WHAT VERSION OF LINUX WE ARE RUNNING (DEBIAN OR UBUNTU)
 case "$OS" in
-    Arch)   ;;
-    Debian) debian_version ;;
-    Ubuntu) apt_pkgs ;;
-    *) fail "Could not detect the OS architecture. Line: $LINENO" ;;
+    Arch)
+        ;;
+    Debian)
+        debian_version
+        ;;
+    Ubuntu)
+        apt_pkgs
+        ;;
+    *)
+        fail "Could not detect the OS architecture. Line: $LINENO"
+        ;;
 esac
 
 # INSTALL OFFICIAL IMAGEMAGICK LIBS
@@ -537,8 +542,8 @@ if build "magick-libs" "$version"; then
     if ! curl -LsSo "magick-libs-$version.rpm" "https://imagemagick.org/archive/linux/CentOS/x86_64/ImageMagick-libs-$version.x86_64.rpm"; then
         fail "Failed to download the magick-libs file. Line: $LINENO"
     fi
-    execute alien -d ./*.rpm || fail "Error: alien -d ./*.rpm Line: $LINENO"
-    execute dpkg -i ./*.deb || fail "Error: dpkg -i ./*.deb Line: $LINENO"
+    execute alien -d ./*.rpm || fail "[Error] alien -d ./*.rpm Line: $LINENO"
+    execute dpkg -i ./*.deb || fail "[Error] dpkg -i ./*.deb Line: $LINENO"
     build_done "magick-libs" "$version"
 fi
 
@@ -554,7 +559,7 @@ if [[ ! -f "/usr/bin/composer" ]]; then
         return 1
     fi
     if ! php composer-setup.php --install-dir="/usr/bin" --filename=composer --quiet; then
-        fail "Failed to install: /usr/bin/composer. Line: $LINENO"
+        fail "Failed to install composer. Line: $LINENO"
     fi
     rm "composer-setup.php"
 fi
@@ -580,6 +585,7 @@ if build "pkg-config" "$version"; then
     download "https://pkgconfig.freedesktop.org/releases/pkg-config-$version.tar.gz"
     execute autoconf
     execute ./configure --prefix="$workspace" \
+                        --with-internal-glib \
                         --with-pc-path="$PKG_CONFIG_PATH" \
                         CFLAGS="-I$workspace/include" \
                         LDFLAGS="-L$workspace/lib64 -L$workspace/lib"
@@ -591,7 +597,7 @@ fi
 find_git_repo "libsdl-org/libtiff" "1" "T"
 if build "libtiff" "$version"; then
     download "https://codeload.github.com/libsdl-org/libtiff/tar.gz/refs/tags/v$version" "libtiff-$version.tar.gz"
-    execute ./autogen.sh
+    execute autoreconf -fi
     execute ./configure --prefix="$workspace" --enable-cxx --with-pic
     execute make "-j$cpu_threads"
     execute make install
@@ -617,11 +623,10 @@ if build "$repo_name" "${version//\$ /}"; then
     execute cmake -S . \
                   -DCMAKE_INSTALL_PREFIX="$workspace" \
                   -DCMAKE_BUILD_TYPE=Release \
-                  -DENABLE_SHARED=ON \
-                  -DENABLE_STATIC=ON \
+                  -DENABLE_{SHARED,STATIC}=ON \
                   -G Ninja -Wno-dev
     execute ninja "-j$cpu_threads"
-    execute ninja "-j$cpu_threads" install
+    execute ninja install
     build_done "$repo_name" "$version"
 fi
 
@@ -678,11 +683,8 @@ if build "$repo_name" "${version//\$ /}"; then
                   -DCMAKE_BUILD_TYPE=Release \
                   -DBUILD_SHARED_LIBS=ON \
                   -DZLIB_INCLUDE_DIR="$workspace/include" \
-                  -DWEBP_BUILD_ANIM_UTILS=OFF \
-                  -DWEBP_BUILD_CWEBP=ON \
-                  -DWEBP_BUILD_DWEBP=ON \
-                  -DWEBP_BUILD_EXTRAS=OFF \
-                  -DWEBP_BUILD_VWEBP=OFF \
+                  -DWEBP_BUILD_{CWEBP,DWEBP}=ON \
+                  -DWEBP_BUILD_{ANIM_UTILS,EXTRAS,VWEBP}=OFF \
                   -DWEBP_ENABLE_SWAP_16BIT_CSP=OFF \
                   -DWEBP_LINK_STATIC=ON \
                   -G Ninja -Wno-dev
@@ -707,8 +709,15 @@ fi
 find_git_repo "1665" "3" "T"
 if build "libxml2" "$version"; then
     download "https://gitlab.gnome.org/GNOME/libxml2/-/archive/v$version/libxml2-v$version.tar.bz2" "libxml2-$version.tar.bz2"
+    if command -v python3.11-config &>/dev/null; then
+        export PYTHON_CFLAGS=$(python3.11-config --cflags)
+        export PYTHON_LIBS=$(python3.11-config --ldflags)
+    else
+        export PYTHON_CFLAGS=$(python3.12-config --cflags)
+        export PYTHON_LIBS=$(python3.12-config --ldflags)
+    fi
     execute ./autogen.sh
-    execute cmake -B build -DCMAKE_INSTALL_PREFIX="$workspace" -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -G Ninja -Wno-dev
+    execute cmake -B build -DCMAKE_INSTALL_PREFIX="$workspace" -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -G Ninja -Wno-dev
     execute ninja "-j$cpu_threads" -C build
     execute ninja -C build install
     build_done "libxml2" "$version"
@@ -729,7 +738,7 @@ if build "fontconfig" "$version"; then
                         --enable-iconv \
                         --enable-libxml2 \
                         --enable-static \
-                        --with-arch=$(uname -m) \
+                        --with-arch="$(uname -m)" \
                         --with-libiconv-prefix=/usr \
                         --with-pic
     execute make "-j$cpu_threads"
@@ -779,7 +788,6 @@ find_git_repo "harfbuzz/harfbuzz" "1" "T"
 if build "harfbuzz" "$version"; then
     download "https://github.com/harfbuzz/harfbuzz/archive/refs/tags/$version.tar.gz" "harfbuzz-$version.tar.gz"
     extracmds=("-D"{benchmark,cairo,docs,glib,gobject,icu,introspection,tests}"=disabled")
-    execute ./autogen.sh
     execute meson setup build --prefix="$workspace" \
                               --buildtype=release \
                               --default-library=static \
@@ -861,9 +869,8 @@ if build "openjpeg" "$version"; then
                   -DCMAKE_INSTALL_PREFIX="$workspace" \
                   -DCMAKE_BUILD_TYPE=Release \
                   -DCMAKE_POSITION_INDEPENDENT_CODE="true" \
-                  -DBUILD_SHARED_LIBS=ON \
+                  -DBUILD_{SHARED_LIBS,THIRDPARTY}=ON \
                   -DBUILD_TESTING=OFF \
-                  -DBUILD_THIRDPARTY=ON \
                   -G Ninja -Wno-dev
     execute ninja "-j$cpu_threads" -C build
     execute ninja -C build install
@@ -881,14 +888,8 @@ if build "lcms2" "$version"; then
     build_done "lcms2" "$version"
 fi
 
-git_caller "https://github.com/dejavu-fonts/dejavu-fonts.git" "dejavu-fonts-git"
-if build "$repo_name" "${version//\$ /}"; then
-    git_clone "$git_url" "$repo_name"
-    wget -cqP "resources" "http://www.unicode.org/Public/UNIDATA/UnicodeData.txt" "http://www.unicode.org/Public/UNIDATA/Blocks.txt"
-    execute ln -sf "$fc_dir/fc-lang" "resources/fc-lang"
-    execute make "-j$cpu_threads" full-ttf
-    build_done "$repo_name" "$version"
-fi
+# Download and install fonts
+download_fonts
 
 # Determine whether of not to install autotrace
 set_autotrace
@@ -921,9 +922,11 @@ if build "imagemagick" "$version"; then
                          --enable-hugepages \
                          --enable-legacy-support \
                          --enable-opencl \
-                         --with-dejavu-font-dir=/usr/share/fonts/truetype/dejavu \
                          --with-dmalloc \
-                         --with-fontpath=/usr/share/fonts \
+                         --with-fontpath=/usr/share/fonts/truetype \
+                         --with-dejavu-font-dir=/usr/share/fonts/truetype/dejavu \
+                         --with-gs-font-dir=/usr/share/fonts/ghostscript \
+                         --with-urw-base35-font-dir=/usr/share/fonts/type1/urw-base35 \
                          --with-fpx \
                          --with-gslib \
                          --with-gvc \
@@ -937,7 +940,6 @@ if build "imagemagick" "$version"; then
                          --with-quantum-depth=16 \
                          --with-rsvg \
                          --with-tcmalloc \
-                         --with-urw-base35-font-dir=/usr/share/fonts/type1/urw-base35 \
                          --with-utilities \
                          --with-autotrace \
                          CFLAGS="$CFLAGS -DCL_TARGET_OPENCL_VERSION=300" \
@@ -953,9 +955,6 @@ ldconfig
 
 # SHOW THE NEWLY INSTALLED MAGICK VERSION
 show_version
-
-# Set the policy.xml for High-End CPU's
-set_high_end_cpu
 
 # PROMPT THE USER TO CLEAN UP THE BUILD FILES
 cleanup
