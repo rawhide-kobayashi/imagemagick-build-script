@@ -727,7 +727,11 @@ find_git_repo "890" "2"
 fc_dir="$packages/fontconfig-$version"
 if build "fontconfig" "$version"; then
     download "https://gitlab.freedesktop.org/fontconfig/fontconfig/-/archive/$version/fontconfig-$version.tar.bz2"
+    XML2_CFLAGS=$(xml2-config --cflags)
+    XML2_LIBS=$(xml2-config --libs)
     LDFLAGS+=" -DLIBXML_STATIC"
+    CFLAGS+=" $XML2_CFLAGS"
+    LDFLAGS+=" $XML2_LIBS"
     sed -i "s|Cflags:|& -DLIBXML_STATIC|" "fontconfig.pc.in"
     execute ./autogen.sh --noconf
     execute ./configure --prefix="$workspace" \
@@ -740,7 +744,9 @@ if build "fontconfig" "$version"; then
                         --enable-static \
                         --with-arch="$(uname -m)" \
                         --with-libiconv-prefix=/usr \
-                        --with-pic
+                        --with-pic \
+                        CFLAGS="$CFLAGS" \
+                        LDFLAGS="$LDFLAGS"
     execute make "-j$cpu_threads"
     execute make install
     build_done "fontconfig" "$version"
